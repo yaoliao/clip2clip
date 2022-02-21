@@ -20,15 +20,15 @@ impl ClipboardHandler for ClipboardListener {
     fn on_clipboard_change(&mut self) -> CallbackResult {
         info!("clipboard change ......");
         let mut clip = Clipboard::new().unwrap();
-        let data = if let Ok(text) = clip.get_text() {
-            Msg {
-                mag_type: MsgType::TXT,
-                data: text.into_bytes(),
-            }
-        } else if let Ok(img) = clip.get_image() {
+        let data = if let Ok(img) = clip.get_image() {
             Msg {
                 mag_type: MsgType::IMG { width: img.width, height: img.height },
                 data: Vec::from(img.bytes),
+            }
+        } else if let Ok(text) = clip.get_text() {
+            Msg {
+                mag_type: MsgType::TXT,
+                data: text.into_bytes(),
             }
         } else {
             return CallbackResult::Next;

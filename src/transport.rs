@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::AsyncBufReadExt;
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Msg {
     pub mag_type: MsgType,
     pub data: Vec<u8>,
@@ -33,13 +33,14 @@ pub enum MsgType {
 
 pub struct ClipHandler {
     receiver: tokio::sync::mpsc::Receiver<Msg>,
+    pre: blake3::Hash,
 }
 
 impl ClipHandler {
     pub fn new(
         receiver: tokio::sync::mpsc::Receiver<Msg>,
     ) -> Self {
-        ClipHandler { receiver }
+        ClipHandler { receiver, pre: blake3::hash(b"0")}
     }
 
     #[tokio::main]
@@ -58,17 +59,18 @@ impl ClipHandler {
         // Create a Swarm to manage peers and events
         let mut swarm = {
             // To content-address message, we can take the hash of message and use it as an ID.
-            let message_id_fn = |message: &GossipsubMessage| {
+           /* let message_id_fn = |message: &GossipsubMessage| {
                 let mut s = DefaultHasher::new();
                 message.data.hash(&mut s);
                 MessageId::from(s.finish().to_string())
-            };
+            };*/
 
             // Set a custom gossipsub
             let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
                 .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
-                .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
-                .message_id_fn(message_id_fn) // content-address messages. No two messages of the
+                .validation_mode(ValidationMode::Strict)
+                .max_transmit_size((1024 * 1024 * 1024) as usize)// This sets the kind of message validation. The default is Strict (enforce message signing)
+                //.message_id_fn(message_id_fn) // content-address messages. No two messages of the
                 // same content will be propagated.
                 .build()
                 .expect("Valid config");
@@ -106,11 +108,17 @@ impl ClipHandler {
             tokio::select! {
                     msg = self.receiver.recv() => match msg {
                         Some(data) => {
-                            debug!("receive msg from clipboard :{:?}", data);
+                            info!("receive msg from clipboard :{:?}", data.data.len());
                             let bincode = bincode::serialize(&data).expect("serialize msg err");
-                            if let Err(e) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), bincode){
-                                error!("Publish error: {:?}", e);
+                            info!("bincode size: {:?}", bincode.len());
+                            let hash = blake3::hash(&bincode);
+                            if !self.pre.eq(&hash) {
+                                self.pre = hash;
+                                if let Err(e) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), bincode){
+                                    error!("Publish error: {:?}", e);
+                                }
                             }
+
                         }
                         None => { error!("channel closed !!!") }
                     },
@@ -161,7 +169,7 @@ impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
             message,
         } = message
         {
-            debug!(
+            info!(
                 "Received: '{:?}' from {:?}",
                 String::from_utf8_lossy(&message.data),
                 message.source
