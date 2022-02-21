@@ -103,6 +103,16 @@ impl ClipHandler {
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
 
+        // TODO
+        // add an explicit peer if one was provided
+        if let Some(to_dial) = std::env::args().nth(1) {
+            let address: Multiaddr = to_dial.parse().expect("User to provide valid address.");
+            match swarm.dial(address.clone()) {
+                Ok(_) => println!("Dialed {:?}", address),
+                Err(e) => println!("Dial {:?} failed: {:?}", address, e),
+            };
+        }
+
         // Kick it off
         loop {
             tokio::select! {

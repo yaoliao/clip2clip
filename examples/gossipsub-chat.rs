@@ -53,7 +53,6 @@ use std::time::Duration;
 
 use env_logger::{Builder, Env};
 use futures::StreamExt;
-// use futures::{prelude::*};
 use libp2p::gossipsub::{Gossipsub, MessageId};
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
